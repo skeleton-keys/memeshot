@@ -42,14 +42,17 @@ def fetch_detailed_data(addresses):
 
 detailed_data = fetch_detailed_data(token_addresses)
 
-# Step 4: Define filters
-MIN_LIQUIDITY_USD = 5000      # Reduced for earlier detection
-MIN_MARKET_CAP = 25000        # Reduced to capture lower-cap tokens
-MIN_TXNS_LAST_HOUR = 20       # Ensure early trading activity
-MIN_PRICE_CHANGE_H1 = 0       # Early movers with moderate upward movement
-MAX_PRICE_CHANGE_H1 = 50      # Avoid overextended tokens
-MAX_VOLUME_LIQUIDITY_RATIO = 7  # Tighter to exclude over-traded tokens
-MIN_BOOST_ACTIVE = 0       # Lower threshold for early marketing campaigns
+# Step 4: Define updated filters
+MIN_LIQUIDITY_USD = 3000        # Capture emerging tokens
+MAX_LIQUIDITY_USD = 200000      # Avoid mature tokens
+MIN_MARKET_CAP = 10000          # Focus on low-cap tokens
+MIN_TXNS_LAST_HOUR = 10         # Early-stage activity
+H1_H6_TXN_RATIO = 0.2           # H1 > 20% of H6
+H1_H6_VOLUME_RATIO = 0.2        # H1 volume > 20% of H6
+MIN_PRICE_CHANGE_H1 = 0         # Steady growth
+MAX_PRICE_CHANGE_H1 = 20        # Avoid overextended tokens
+MAX_VOLUME_LIQUIDITY_RATIO = 10 # Looser ratio for early movers
+MIN_BOOST_ACTIVE = 10           # Active boosted tokens only
 
 # Step 5: Filter tokens
 selected_tokens = []
@@ -82,13 +85,13 @@ for pair in detailed_data:
           f"Price Change H1: {price_change_h1}, Boosts: {total_boost}, "
           f"Volume/Liquidity Ratio: {volume_liquidity_ratio}")
 
-    # Apply filters
+    # Apply updated filters
     if (
-        liquidity_usd >= MIN_LIQUIDITY_USD
+        MIN_LIQUIDITY_USD <= liquidity_usd <= MAX_LIQUIDITY_USD
         and market_cap >= MIN_MARKET_CAP
         and txns_h1 >= MIN_TXNS_LAST_HOUR
-        and txns_h1 > (0.25 * txns_h6)  # Momentum: H1 transactions > 50% of H6
-        and volume_h1 > (0.25 * volume_h6)  # Momentum: H1 volume > 50% of H6
+        and (txns_h1 / txns_h6) >= H1_H6_TXN_RATIO if txns_h6 > 0 else True
+        and (volume_h1 / volume_h6) >= H1_H6_VOLUME_RATIO if volume_h6 > 0 else True
         and MIN_PRICE_CHANGE_H1 <= price_change_h1 <= MAX_PRICE_CHANGE_H1
         and volume_liquidity_ratio <= MAX_VOLUME_LIQUIDITY_RATIO
         and total_boost >= MIN_BOOST_ACTIVE

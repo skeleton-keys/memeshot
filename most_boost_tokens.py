@@ -42,14 +42,18 @@ def fetch_detailed_data(addresses):
 
 detailed_data = fetch_detailed_data(token_addresses)
 
-# Step 4: Define filters for most boosted tokens
-MIN_LIQUIDITY_USD = 10000      # Moderate liquidity for boosted tokens
-MIN_MARKET_CAP = 50000         # Higher market cap for more stability
-MIN_TXNS_LAST_HOUR = 50        # Higher transactions for boosted tokens
-MIN_PRICE_CHANGE_H1 = 2        # Moderate price increase
-MAX_PRICE_CHANGE_H1 = 300       # Allow higher price change for pumps
-MAX_VOLUME_LIQUIDITY_RATIO = 100 # To avoid over-traded tokens
-MIN_BOOST_ACTIVE = 0         # High boost activity threshold
+# Step 4: Define refined filters for most boosted tokens
+MIN_LIQUIDITY_USD = 5000         # Capture newer tokens with lower liquidity
+MIN_MARKET_CAP = 25000           # Slightly lower threshold for newer tokens
+MIN_TXNS_LAST_HOUR = 25          # Moderate activity to detect early momentum
+MIN_PRICE_CHANGE_H1 = 0          # Allow neutral tokens without immediate price changes
+MAX_PRICE_CHANGE_H1 = 100        # Avoid overextended tokens with extreme pumps
+MAX_VOLUME_LIQUIDITY_RATIO = 50  # Allow moderate trading activity
+MIN_BOOST_ACTIVE = 10            # Higher boost threshold for marketed tokens
+
+# Relative momentum filters
+MIN_TXNS_H1_TO_H6_RATIO = 0.25   # At least 25% of H6 transactions in H1
+MIN_VOLUME_H1_TO_H6_RATIO = 0.3  # At least 30% of H6 volume in H1
 
 # Step 5: Filter tokens
 selected_tokens = []
@@ -61,11 +65,9 @@ for pair in detailed_data:
     price_change = pair.get("priceChange", {})
     volume = pair.get("volume", {})
     token_address = base_token.get("address")
-    
-    # Extract boost value
     total_boost = token_boosts.get(token_address, 0)
 
-    # Extract key metrics
+    # Extract metrics
     liquidity_usd = liquidity.get("usd", 0)
     market_cap = pair.get("marketCap", 0)
     txns_h1 = txns.get("h1", {}).get("buys", 0) + txns.get("h1", {}).get("sells", 0)
@@ -83,14 +85,14 @@ for pair in detailed_data:
           f"Price Change H1: {price_change_h1}, Boosts: {total_boost}, "
           f"Volume/Liquidity Ratio: {volume_liquidity_ratio}")
 
-    # Apply filters
+    # Apply updated filters
     if (
         liquidity_usd >= MIN_LIQUIDITY_USD
         and market_cap >= MIN_MARKET_CAP
         and txns_h1 >= MIN_TXNS_LAST_HOUR
-        and volume_h1 >= 0.5 * volume_h6  # Recent volume should remain significant
-        #and price_change_h1 >= 0.25 * price_change_h6  # Allow for steady/slightly declining momentum
-        #and price_change_h1 >= MIN_PRICE_CHANGE_H1  # Ensure minimum price activity
+        and (txns_h1 / txns_h6 if txns_h6 else 0) >= MIN_TXNS_H1_TO_H6_RATIO
+        and (volume_h1 / volume_h6 if volume_h6 else 0) >= MIN_VOLUME_H1_TO_H6_RATIO
+        and MIN_PRICE_CHANGE_H1 <= price_change_h1 <= MAX_PRICE_CHANGE_H1
         and volume_liquidity_ratio <= MAX_VOLUME_LIQUIDITY_RATIO
         and total_boost >= MIN_BOOST_ACTIVE
     ):
@@ -104,7 +106,6 @@ for pair in detailed_data:
             "priceChangeH1": price_change_h1,
             "boosts": total_boost
         })
-
 
 # Step 6: Output filtered tokens
 output = {

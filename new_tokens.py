@@ -35,13 +35,13 @@ if not detailed_data:
 
 # Step 4: Define relaxed filters for early detection
 MIN_LIQUIDITY_USD = 5000  # Minimum initial liquidity
-MAX_LIQUIDITY_USD = 200000  # Avoid mature coins
+MAX_LIQUIDITY_USD = 500000  # Avoid mature coins
 MIN_TXNS_LAST_HOUR = 5  # Detect coins with very early activity
-MAX_TXNS_LAST_HOUR = 200  # Avoid overly active coins (already pumped)
+MAX_TXNS_LAST_HOUR = 1000  # Avoid overly active coins (already pumped)
 MAX_VOLUME_LIQUIDITY_RATIO = 10  # Looser ratio for higher activity coins
 MIN_PRICE_CHANGE = -10  # Allow for steady or slightly declining coins
-MAX_PRICE_CHANGE = 50  # Avoid coins that already show massive pumps
-PAIR_AGE_MINUTES = 15  # Slightly increased age window
+MAX_PRICE_CHANGE = 100  # Avoid coins that already show massive pumps
+PAIR_AGE_MINUTES = 60  # Slightly increased age window
 
 # Step 5: Filter new tokens
 selected_tokens = []
