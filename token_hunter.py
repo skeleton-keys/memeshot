@@ -118,7 +118,7 @@ def main():
         "tokens": top_tokens
     }
 
-    output_file = "/Users/josephdire/Dev/memeshot/tokens.json"
+    output_file = "tokens.json"
     with open(output_file, "w") as file:
         json.dump(output, file, indent=4)
 
