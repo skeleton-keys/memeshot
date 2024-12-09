@@ -1,6 +1,7 @@
 import requests
 from datetime import datetime
 import json
+import subprocess
 
 # Consolidated function for fetching detailed token data
 def fetch_detailed_data(addresses):
@@ -20,37 +21,48 @@ def fetch_detailed_data(addresses):
 def get_latest_boosted_tokens():
     url = 'https://api.dexscreener.com/token-boosts/latest/v1'
     response = requests.get(url)
-    return response.json() if response.status_code == 200 else []
+    if response.status_code == 200:
+        # Ensure response is a list and extract token addresses
+        boosted_tokens = response.json()
+        if isinstance(boosted_tokens, list):
+            return boosted_tokens
+    print("Failed to fetch latest boosted tokens or unexpected response format.")
+    return []
+
 
 # Fetch Most Boosted Tokens
 def get_most_boosted_tokens():
     url = 'https://api.dexscreener.com/token-boosts/top/v1'
     response = requests.get(url)
-    return response.json() if response.status_code == 200 else []
+    if response.status_code == 200:
+        boosted_tokens = response.json()
+        if isinstance(boosted_tokens, list):
+            return boosted_tokens
+    print("Failed to fetch most boosted tokens or unexpected response format.")
+    return []
 
 # Fetch New Tokens
 def get_new_tokens():
     url = 'https://api.dexscreener.com/token-profiles/latest/v1'
     response = requests.get(url)
-    return response.json() if response.status_code == 200 else []
+    if response.status_code == 200:
+        new_tokens = response.json()
+        if isinstance(new_tokens, list):
+            return new_tokens
+    print("Failed to fetch new tokens or unexpected response format.")
+    return []
 
-# Remove duplicates by token address
-def remove_duplicates(tokens):
-    seen_addresses = set()
-    unique_tokens = []
-    for token in tokens:
-        token_address = token.get("tokenAddress")
-        if token_address and token_address not in seen_addresses:
-            unique_tokens.append(token)
-            seen_addresses.add(token_address)
-    return unique_tokens
 
-# Filters for latest boosted tokens
-def filter_latest_boosted_tokens(detailed_data):
+# Filters with permanent thresholds for core stability
+def filter_tokens(detailed_data):
     selected_tokens = []
-    MIN_LIQUIDITY_USD = 5000
-    MIN_TXNS_LAST_HOUR = 20
-    MAX_PRICE_CHANGE_H1 = 50
+    MIN_LIQUIDITY_USD = 50000  # Minimum liquidity
+    MAX_LIQUIDITY_USD = 500000  # Maximum liquidity
+    MIN_TXNS_LAST_HOUR = 100  # Minimum transactions per hour
+    MAX_TXNS_LAST_HOUR = 1000  # Maximum transactions per hour
+    MAX_PRICE_CHANGE_H1 = 30  # Maximum hourly price change (%)
+    MIN_PRICE_CHANGE_H1 = 0  # Minimum hourly price change (%)
+
     for pair in detailed_data:
         base_token = pair.get("baseToken", {})
         liquidity = pair.get("liquidity", {})
@@ -63,9 +75,9 @@ def filter_latest_boosted_tokens(detailed_data):
         price_change_h1 = price_change.get("h1", 0)
 
         if (
-            liquidity_usd >= MIN_LIQUIDITY_USD
-            and txns_h1 >= MIN_TXNS_LAST_HOUR
-            and price_change_h1 <= MAX_PRICE_CHANGE_H1
+            MIN_LIQUIDITY_USD <= liquidity_usd <= MAX_LIQUIDITY_USD
+            and MIN_TXNS_LAST_HOUR <= txns_h1 <= MAX_TXNS_LAST_HOUR
+            and MIN_PRICE_CHANGE_H1 <= price_change_h1 <= MAX_PRICE_CHANGE_H1
         ):
             selected_tokens.append({
                 "tokenAddress": token_address,
@@ -75,104 +87,44 @@ def filter_latest_boosted_tokens(detailed_data):
                 "transactionsLastHour": txns_h1,
                 "priceChangeH1": price_change_h1
             })
+    print(f"{len(selected_tokens)} tokens passed the filters.")
     return selected_tokens
 
-# Filters for most boosted tokens
-def filter_most_boosted_tokens(detailed_data):
-    selected_tokens = []
-    MIN_LIQUIDITY_USD = 10000
-    MIN_TXNS_LAST_HOUR = 50
-    for pair in detailed_data:
-        base_token = pair.get("baseToken", {})
-        liquidity = pair.get("liquidity", {})
-        txns = pair.get("txns", {})
-        token_address = base_token.get("address")
-
-        liquidity_usd = liquidity.get("usd", 0)
-        txns_h1 = txns.get("h1", {}).get("buys", 0) + txns.get("h1", {}).get("sells", 0)
-
-        if liquidity_usd >= MIN_LIQUIDITY_USD and txns_h1 >= MIN_TXNS_LAST_HOUR:
-            selected_tokens.append({
-                "tokenAddress": token_address,
-                "name": base_token.get("name"),
-                "symbol": base_token.get("symbol"),
-                "liquidityUsd": liquidity_usd,
-                "transactionsLastHour": txns_h1
-            })
-    return selected_tokens
-
-# Filters for new tokens
-def filter_new_tokens(detailed_data):
-    selected_tokens = []
-    MIN_LIQUIDITY_USD = 5000
-    MAX_TXNS_LAST_HOUR = 1000
-    PAIR_AGE_MINUTES = 60
-    for pair in detailed_data:
-        base_token = pair.get("baseToken", {})
-        liquidity = pair.get("liquidity", {})
-        txns = pair.get("txns", {})
-        pair_created_at = pair.get("pairCreatedAt", 0)
-
-        liquidity_usd = liquidity.get("usd", 0)
-        txns_h1 = txns.get("h1", {}).get("buys", 0) + txns.get("h1", {}).get("sells", 0)
-        pair_age_minutes = (datetime.now().timestamp() - (pair_created_at / 1000)) / 60
-
-        if (
-            liquidity_usd >= MIN_LIQUIDITY_USD
-            and txns_h1 <= MAX_TXNS_LAST_HOUR
-            and pair_age_minutes <= PAIR_AGE_MINUTES
-        ):
-            selected_tokens.append({
-                "tokenAddress": base_token.get("address"),
-                "name": base_token.get("name"),
-                "symbol": base_token.get("symbol"),
-                "liquidityUsd": liquidity_usd,
-                "transactionsLastHour": txns_h1,
-                "pairAgeMinutes": pair_age_minutes
-            })
-    return selected_tokens
-
-# Scoring function for ranking tokens
+# Updated scoring function to prioritize consistent performance
 def calculate_score(token):
     transactions = token.get("transactionsLastHour", 0)
     liquidity = token.get("liquidityUsd", 0)
-    age = token.get("pairAgeMinutes", float("inf"))  # Penalize older tokens
-    return (transactions * 2) + (liquidity * 0.1) - (age * 0.5)
+    price_change = token.get("priceChangeH1", 0)
+
+    # Adjusted weights for stable token prioritization
+    return (transactions * 1.5) + (liquidity * 0.1) + (price_change * 2)
 
 # Main Execution
-latest_boosted_tokens = get_latest_boosted_tokens()
-most_boosted_tokens = get_most_boosted_tokens()
-new_tokens = get_new_tokens()
+def main():
+    latest_boosted_tokens = get_latest_boosted_tokens()
+    most_boosted_tokens = get_most_boosted_tokens()
+    new_tokens = get_new_tokens()
 
-# Combine all token addresses
-all_token_addresses = set(
-    token.get('tokenAddress') for token in (latest_boosted_tokens + most_boosted_tokens + new_tokens)
-)
+    all_token_addresses = set(
+        token.get('tokenAddress') for token in (latest_boosted_tokens + most_boosted_tokens + new_tokens)
+    )
 
-# Fetch detailed data
-detailed_data = fetch_detailed_data(list(all_token_addresses))
+    detailed_data = fetch_detailed_data(list(all_token_addresses))
+    filtered_tokens = filter_tokens(detailed_data)
+    top_tokens = sorted(filtered_tokens, key=calculate_score, reverse=True)[:10]
 
-# Apply individual filters
-latest_filtered = filter_latest_boosted_tokens(detailed_data)
-most_boosted_filtered = filter_most_boosted_tokens(detailed_data)
-new_filtered = filter_new_tokens(detailed_data)
+    output = {
+        "timestamp": datetime.now().isoformat(),
+        "tokens": top_tokens
+    }
 
-# Sort by score and select top 5 from each category
-latest_top_5 = sorted(latest_filtered, key=calculate_score, reverse=True)[:5]
-most_boosted_top_5 = sorted(most_boosted_filtered, key=calculate_score, reverse=True)[:5]
-new_top_5 = sorted(new_filtered, key=calculate_score, reverse=True)[:5]
+    output_file = "/Users/josephdire/Dev/memeshot/tokens.json"
+    with open(output_file, "w") as file:
+        json.dump(output, file, indent=4)
 
-# Combine results and remove duplicates
-combined_tokens = latest_top_5 + most_boosted_top_5 + new_top_5
-unique_tokens = remove_duplicates(combined_tokens)
+    print(f"Final filtered tokens written to {output_file}")
 
-# Output to JSON
-output = {
-    "timestamp": datetime.now().isoformat(),
-    "tokens": unique_tokens
-}
+    #subprocess.run(["python3", "/Users/josephdire/Dev/memeshot/token_sender.py", output_file])
 
-with open("tokens.json", "w") as file:
-    json.dump(output, file, indent=4)
-
-print("Final filtered tokens written to tokens.json")
+if __name__ == "__main__":
+    main()
