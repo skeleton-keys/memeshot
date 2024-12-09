@@ -124,7 +124,7 @@ def main():
 
     print(f"Final filtered tokens written to {output_file}")
 
-    #subprocess.run(["python3", "/Users/josephdire/Dev/memeshot/token_sender.py", output_file])
+    subprocess.run(["python3", "token_sender.py", output_file])
 
 if __name__ == "__main__":
     main()
